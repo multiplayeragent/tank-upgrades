@@ -1,0 +1,21 @@
+{
+  "name": "Tank Upgrades",
+  "genre": "arcade",
+  "dim": "2D",
+  "mode": "Drop-in",
+  "players": "2–16",
+  "hook": "Shoot shapes, level up, outgun every other tank.",
+  "how": "Break shapes for XP. Every level gives you a point for Speed, Reload, Damage or Armor, and at level 10 you pick a new tank: Twin, Sniper or Gunner. Destroy another tank to take half its score.",
+  "controls": "WASD to move, mouse to aim, click to shoot, 1–4 to upgrade; two thumb sticks on touch",
+  "uses": [
+    ["Leaderboard", "Each player's best score in one life, shown when you're destroyed."],
+    ["Host-run rules", "The host's browser runs the shapes and decides who broke them; if it leaves, the next player takes over."],
+    ["Bots", "Bots of every level fill the arena until enough people join."],
+    ["Live sync", "Every tank and bullet shows up for everyone at once; whoever gets hit says so."]
+  ],
+  "ideas": [
+    "Add a Flank tank with a second barrel facing backwards",
+    "Make the shapes space rocks and the arena a starfield",
+    "Add a boss shape that spawns in the middle every two minutes"
+  ]
+}

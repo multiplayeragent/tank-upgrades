@@ -1,0 +1,900 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tank Upgrades</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #c9ced8; }
+  body { font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #2a3142; user-select: none; -webkit-user-select: none; }
+  canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; touch-action: none; cursor: crosshair; }
+  .hud { position: fixed; pointer-events: none; }
+  #score { top: max(12px, env(safe-area-inset-top)); left: max(14px, env(safe-area-inset-left)); font-weight: 900; font-size: 26px; line-height: 1.05; text-shadow: 0 2px 0 #fff; }
+  #score small { display: block; font-size: 13px; font-weight: 700; opacity: .65; }
+  #top { top: max(12px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); width: 170px; padding: 8px 12px; border-radius: 12px; background: #ffffffcc;
+         box-shadow: 0 2px 12px #0000001f; font-size: 13px; }
+  #top:empty { display: none; }
+  #top div { display: flex; align-items: center; gap: 8px; } #top i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  #top span { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } #top b { font-variant-numeric: tabular-nums; } #top .me { font-weight: 800; }
+  #feed { top: calc(max(12px, env(safe-area-inset-top)) + 140px); right: max(14px, env(safe-area-inset-right)); font-size: 12px; font-weight: 700; text-align: right; text-shadow: 0 1px 0 #fff; }
+  #feed div { margin-top: 3px; }
+  #toast { top: 15%; left: 0; right: 0; text-align: center; font-size: 26px; font-weight: 900; text-shadow: 0 2px 0 #fff, 0 0 14px #fff; transition: opacity .4s; }
+  #hint { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 64px); left: 0; right: 0; padding: 0 16px; text-align: center; font-size: 14px; font-weight: 700; transition: opacity .8s; }
+  #hint span { display: inline-block; padding: 7px 16px; border-radius: 14px; background: #ffffffe0; box-shadow: 0 2px 10px #0000001f; }
+  #xpbar { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 22px); left: 50%; transform: translateX(-50%); width: min(380px, 60vw); height: 20px; border-radius: 10px;
+           background: #2a3142cc; border: 3px solid #2a3142; overflow: hidden; }
+  #xpbar i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(#ffe27a, #f5c43a); transition: width .25s; }
+  #xpbar span { position: absolute; inset: 0; text-align: center; font: 800 12px/20px system-ui, sans-serif; color: #fff; text-shadow: 0 1px 2px #000; }
+  #net { bottom: max(10px, env(safe-area-inset-bottom)); left: max(14px, env(safe-area-inset-left)); font-size: 12px; opacity: .7; }
+  #ups { position: fixed; left: max(14px, env(safe-area-inset-left)); bottom: calc(max(10px, env(safe-area-inset-bottom)) + 26px); width: 210px; padding: 8px 10px 10px;
+         border-radius: 14px; background: #2a3142e6; color: #fff; box-shadow: 0 4px 16px #0003; }
+  .touch #ups { bottom: auto; top: calc(max(12px, env(safe-area-inset-top)) + 64px); width: 180px; }
+  #ups h4 { margin: 0 0 6px; font-size: 13px; color: #ffe27a; }
+  #ups button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; margin-top: 4px; padding: 0 8px; border: 0; border-radius: 10px;
+                background: #ffffff14; color: #fff; font: 700 13px system-ui, sans-serif; cursor: pointer; touch-action: none; }
+  #ups button:disabled { opacity: .45; cursor: default; }
+  #ups button:not(:disabled):hover, #ups button:not(:disabled):active { background: #ffffff2e; }
+  #ups em { font-style: normal; width: 54px; text-align: left; } #ups u { flex: 1; display: flex; gap: 3px; text-decoration: none; }
+  #ups u i { flex: 1; height: 8px; border-radius: 3px; background: #ffffff26; } #ups kbd { font: 700 11px system-ui; opacity: .6; }
+  .touch #ups kbd { display: none; }
+  #pick { position: fixed; top: 31%; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; padding: 10px;
+          border-radius: 16px; background: #2a3142e6; box-shadow: 0 4px 16px #0003; }
+  #pick h4 { position: absolute; top: -26px; left: 0; right: 0; margin: 0; text-align: center; font-size: 15px; font-weight: 900; text-shadow: 0 1px 0 #fff; color: #2a3142; }
+  #pick button { width: 92px; min-height: 92px; border: 0; border-radius: 12px; background: #ffffff14; color: #fff; font: 800 13px system-ui, sans-serif; cursor: pointer; touch-action: none; }
+  #pick button:hover, #pick button:active { background: #ffffff30; } #pick canvas { width: 56px; height: 56px; display: block; margin: 0 auto 4px; }
+  #pick kbd { font: 700 11px system-ui; opacity: .6; } .touch #pick kbd { display: none; }
+  .touch #pick { top: calc(max(12px, env(safe-area-inset-top)) + 150px); } .touch #toast { top: 38%; }
+  #over { position: fixed; inset: 0; display: grid; place-items: center; background: #2a314255; }
+  #ups[hidden], #pick[hidden], #over[hidden], .stick[hidden] { display: none; }
+  .card { box-sizing: border-box; width: min(380px, calc(100vw - 32px)); max-height: 84vh; overflow: auto; padding: 22px; border-radius: 18px; background: #fff; box-shadow: 0 10px 40px #0003; text-align: center; }
+  .card h2 { margin: 0 0 4px; font-size: 25px; }
+  .card h3 { margin: 16px 0 4px; font-size: 12px; color: #7a839a; text-transform: uppercase; letter-spacing: .06em; text-align: left; }
+  .card ol { text-align: left; margin: 0 0 16px; padding-left: 26px; font-size: 14px; min-height: 40px; }
+  .card li span { float: right; font-variant-numeric: tabular-nums; }
+  button.go { width: 100%; min-height: 48px; border: 0; border-radius: 12px; background: #2fb36d; color: #fff; font: 800 17px system-ui, sans-serif; cursor: pointer; box-shadow: 0 4px 0 #23864f; }
+  .stick { position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 2px solid #2a314255; background: #2a314214; pointer-events: none; }
+  .stick i { position: absolute; left: 34px; top: 34px; width: 52px; height: 52px; border-radius: 50%; background: #2a314266; }
+  @media (max-width: 640px) { #top { width: 128px; font-size: 12px; } #score { font-size: 22px; } #pick button { width: 80px; min-height: 84px; } }
+</style>
+<script src="https://cdn.multiplayeragent.com/sdk/mp.global.js"></script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div class="hud" id="score"></div>
+<div class="hud" id="top"></div>
+<div class="hud" id="feed"></div>
+<div class="hud" id="toast"></div>
+<div class="hud" id="hint"></div>
+<div class="hud" id="xpbar"><i></i><span></span></div>
+<div class="hud" id="net">Connecting…</div>
+<div id="ups" hidden><h4></h4></div>
+<div id="pick" hidden><h4>Level 10: pick your tank</h4></div>
+<div class="stick" id="stickMove" hidden><i></i></div>
+<div class="stick" id="stickAim" hidden><i></i></div>
+<div id="over" hidden>
+  <div class="card">
+    <h2 id="overTitle">Destroyed</h2>
+    <div id="overScore"></div>
+    <h3>Top scores, all time</h3>
+    <ol id="board"><li>Loading the leaderboard…</li></ol>
+    <button class="go" id="again">Play again</button>
+  </div>
+</div>
+<script>
+/* ═══ TANK UPGRADES · a Multiplayer Agent starter ══════════════════════════════════════
+ * Shoot shapes for XP, level up your tank, take on the others. Drop-in, 2–16 players;
+ * bots fill empty seats.
+ *
+ * WHERE THINGS ARE (search for the "── " headers):
+ *   CONFIG ........ every number worth tuning: arena, stats, shapes, bots
+ *   CONNECTION .... MP_CONNECT, joining, the offline room, who is host
+ *   TANKS ......... levels, the four stats, the tank classes and firing (shared by players and bots)
+ *   BULLETS ....... bullets every screen flies, and who decides a hit
+ *   WORLD (HOST) .. the shapes and the bots. Only the host writes these.
+ *   BOT BRAIN ..... how a bot picks a target, moves, aims and spends its points
+ *   ME ............ moving, shooting, upgrading, getting hit, respawning. Each player writes its own.
+ *   OTHERS ........ everyone else's tanks and the shapes, eased between snapshots
+ *   DRAW .......... camera, floor, shapes, bullets, tanks, effects, minimap
+ *   HUD & OVER .... score, XP bar, upgrade panel, tank picker, top 5, feed, game-over card, sound
+ *   INPUT ......... WASD + mouse, keys 1–7, twin thumb sticks on touch
+ *
+ * HOW THE MULTIPLAYER WORKS (a relay room: no server code):
+ *   - Each player writes its OWN entity: `p` (one packed JSON field: x, y, velocity, aim, hp,
+ *     max hp, level, class, score, dead, shield) about 10 times a second, `hb` (heartbeat)
+ *     once a second, and `n`/`c` (name, color) once. Your score, level and stats are your own.
+ *   - Shots are events: "shot" {b: [[x, y, angle, msAgo]…], s, d, r} (speed, damage, size),
+ *     batched 10 times a second. Every screen flies every bullet the same way.
+ *   - A HIT ON A TANK IS THE VICTIM'S OWN FACT: only you check bullets against yourself, take
+ *     the damage, and at 0 hp you send "down" {v: you, by: shooter, xp}. The shooter adds xp.
+ *     (The host does this for bots.) Elsewhere a bullet just stops with a spark.
+ *   - The HOST is the lowest sessionId among live players (heartbeat seen in the last 3s),
+ *     worked out every frame. Only the host writes the shared fields `shapes` (every shape:
+ *     [id, kind, x, y, hp]) and `bots`. The host decides which bullets break shapes and sends
+ *     "xp" {to, n} to the player who broke one. A new host adopts both fields and carries on.
+ *   - Bot shots go out batched, 10 times a second: "shots" {list: [[bot, x, y, a, s, d, r, ago]…]}.
+ *   - ?attract plays offline with bots only (the preview video is recorded from it).
+ *   - Leaderboard "top-score": each player's best score in one life, shown when you're destroyed.
+ */
+
+// ── CONFIG ──────────────────────────────────────────────────────────────────────────
+const CONFIG = {
+  map: 2400,            // the arena is map × map px
+  seats: 8,             // bots fill the arena up to this many tanks
+  shapes: 56,           // shapes kept on the map (keep it under ~80: they share one field)
+  maxLevel: 29,         // one upgrade point for every level after the first
+  maxStat: 7,           // most points one stat can take
+  classAt: 10,          // the level where you pick a new tank
+  hp: 60,               // health at level 1; each Armor point adds hpPerPoint
+  hpPerPoint: 22,
+  regen: 0.05,          // share of max health healed per second, 3s after the last hit
+  speed: 210,           // px/s; each Speed point adds speedPerPoint
+  speedPerPoint: 16,
+  reload: 0.5,          // seconds between shots; each Reload point cuts 13%
+  damage: 8,            // per bullet; each Damage point adds damagePerPoint
+  damagePerPoint: 3.5,
+  bulletSpeed: 620,     // px/s
+  bulletLife: 1.2,      // seconds before a bullet fizzles
+  respawnMs: 3000,      // ms a bot stays down
+  shieldMs: 2500,       // ms nobody can hurt you after you spawn
+  killXp: 0.5,          // share of a destroyed tank's score its killer gets (+20)
+  botLevel: [1, 12],    // bots join at a random level in this range
+  botAim: 0.12,         // radians a bot's aim wanders
+  botAggr: [0.3, 0.9],  // how keen each bot is to pick a fight instead of farming shapes (0..1)
+  botRange: 620,        // px: bots pick fights this close
+  board: "top-score",   // leaderboard name
+};
+// Shapes: kind 0..2. xp = score for breaking one.
+const SHAPES = [
+  { name: "square", sides: 4, r: 17, hp: 10, xp: 10, color: "#ffd23f", share: 0.6 },
+  { name: "triangle", sides: 3, r: 19, hp: 30, xp: 25, color: "#ff7a7a", share: 0.28 },
+  { name: "pentagon", sides: 5, r: 32, hp: 110, xp: 130, color: "#7f8cff", share: 0.12 },
+];
+// Tank classes. Each barrel: [angle offset, side offset, length, width, tip width] (× the tank's radius).
+const CLASSES = {
+  basic: { name: "Tank", barrels: [[0, 0, 1.9, 0.85]], reload: 1, damage: 1, speed: 1, spread: 0.03, view: 1 },
+  twin: { name: "Twin", barrels: [[0, -0.45, 1.85, 0.72], [0, 0.45, 1.85, 0.72]], reload: 1, damage: 0.7, speed: 1, spread: 0.05, view: 1 },
+  sniper: { name: "Sniper", barrels: [[0, 0, 2.5, 0.8]], reload: 1.5, damage: 1.7, speed: 1.5, spread: 0.01, view: 1.25 },
+  gunner: { name: "Gunner", barrels: [[0, 0, 1.7, 0.85, 1.35]], reload: 0.42, damage: 0.55, speed: 0.9, spread: 0.2, view: 1 },
+};
+const PICKS = ["twin", "sniper", "gunner"];
+const STATS = ["Speed", "Reload", "Damage", "Armor"];
+const STAT_COLORS = ["#5ad1ff", "#ffd23f", "#ff7a7a", "#7bea8c"];
+const BOT_NAMES = ["Rumble", "Turret", "Bolt", "Sarge", "Piston", "Gizmo", "Tread", "Flak", "Major", "Cog", "Rivet", "Howitzer", "Dozer", "Mortar"];
+const COLORS = ["#3a86ff", "#f2545b", "#2fb36d", "#8f5cf7", "#fb8b24", "#ff5fa8", "#14b8c4", "#a3b818", "#b5446e", "#3b4cca", "#d4a017", "#6d6875"];
+
+// ── CONNECTION ──────────────────────────────────────────────────────────────────────
+// The builder fills these in for this game. Downloaded from GitHub? Put your own pk_ key here.
+const MP_CONNECT = {
+  key: 'pk_REPLACE_ME',
+  room: 'tank-upgrades',
+  endpoint: 'wss://live.multiplayeragent.com',
+  apiUrl: 'https://api.multiplayeragent.com',
+};
+const ATTRACT = new URLSearchParams(location.search).has("attract");
+if (ATTRACT) Object.assign(CONFIG, { map: 1150, seats: 8, shapes: 42, botLevel: [8, 22], respawnMs: 1000, shieldMs: 600, botRange: 700, botAggr: [0.85, 1] });
+
+/** Same shape as the SDK client, kept in this tab: offline play and ?attract. */
+function localRoom() {
+  const id = "local", state = { entities: { players: { [id]: {} } }, shared: {} }, subs = [];
+  let queued = false;
+  const emit = () => { if (!queued) { queued = true; queueMicrotask(() => { queued = false; subs.forEach((f) => f(state)); }); } };
+  const put = (o, k, v) => { if (typeof k === "object") Object.assign(o, k); else o[k] = v; emit(); };
+  return {
+    sessionId: id, state, offline: true,
+    me: { set: (k, v) => put(state.entities.players[id], k, v) },
+    setShared: (k, v) => put(state.shared, k, v),
+    onState: (f) => { subs.push(f); f(state); }, onJoin() {}, onLeave() {}, on() {}, send() {},
+    onDisconnect() {}, onReconnect() {}, leave: async () => {},
+  };
+}
+async function connect() {
+  if (ATTRACT || typeof MP === "undefined") return localRoom();
+  try {
+    const mp = await Promise.race([MP.join({ ...MP_CONNECT }), new Promise((_, no) => setTimeout(() => no(new Error("timed out")), 10000))]);
+    window.mp = mp; // the builder calls window.mp.leave() when the page closes
+    return mp;
+  } catch (e) {
+    console.warn("Playing offline:", e && e.message);
+    return localRoom();
+  }
+}
+const parse = (v, fb) => { if (typeof v !== "string") return fb; try { return JSON.parse(v); } catch { return fb; } };
+const parsed = new Map();
+/** A JSON value from state, parsed once per change (read-only: never mutate what this returns). */
+function parseOnce(key, raw, fallback) {
+  const c = parsed.get(key);
+  if (c && c.raw === raw) return c.v;
+  const v = parse(raw, fallback); parsed.set(key, { raw, v }); return v;
+}
+let net = null, S = { entities: { players: {} }, shared: {} };
+const seenHb = new Map();
+/** Players whose heartbeat moved in the last 3s (plus us), sorted by sessionId. */
+function livePlayers() {
+  const now = performance.now(), out = [];
+  for (const [id, p] of Object.entries(S.entities.players || {})) {
+    const s = seenHb.get(id);
+    if (!s || s.hb !== p.hb) seenHb.set(id, { hb: p.hb, at: now });
+    if (id === net.sessionId || now - seenHb.get(id).at < 3000) out.push(id);
+  }
+  return out.sort();
+}
+const isHost = () => livePlayers()[0] === net.sessionId;
+
+// ── TANKS ───────────────────────────────────────────────────────────────────────────
+// A tank (me or a bot): { id, name, color, x, y, vx, vy, a (aim), hp, xp (score), lv, st: [speed,
+// reload, damage, armor], cl (class), dead, shieldUntil, cd (reload left) }.
+const M = CONFIG.map;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const xpFor = (lv) => Math.round(6 * (lv - 1) ** 2.1); // total score needed to reach a level
+function levelFor(xp) { let lv = 1; while (lv < CONFIG.maxLevel && xp >= xpFor(lv + 1)) lv++; return lv; }
+const tankR = (lv) => 22 + lv * 0.5;
+const maxHp = (t) => Math.round(CONFIG.hp + t.st[3] * CONFIG.hpPerPoint + t.lv * 2);
+const speedOf = (t) => (CONFIG.speed + t.st[0] * CONFIG.speedPerPoint) * (1 - t.lv * 0.005);
+const reloadOf = (t) => CONFIG.reload * Math.pow(0.87, t.st[1]) * CLASSES[t.cl].reload;
+const damageOf = (t) => (CONFIG.damage + t.st[2] * CONFIG.damagePerPoint) * CLASSES[t.cl].damage;
+const bulletSpeedOf = (t) => CONFIG.bulletSpeed * CLASSES[t.cl].speed * (1 + t.st[2] * 0.03);
+const bulletR = (t) => (7 + t.st[2] * 0.6) * (t.cl === "gunner" ? 0.75 : 1) * (1 + t.lv * 0.01);
+const pointsLeft = (t) => t.lv - 1 - t.st.reduce((a, b) => a + b, 0);
+
+function newTank(id, name, color) {
+  return { id, name, color, x: M / 2, y: M / 2, vx: 0, vy: 0, a: 0, hp: CONFIG.hp, xp: 0, lv: 1, st: [0, 0, 0, 0], cl: "basic", dead: 0, shieldUntil: 0, cd: 0, hurtAt: -1e9, firedAt: -1e9, kills: 0 };
+}
+/** Score went up: work out the new level. Returns how many levels were gained. */
+function gainXp(t, n) {
+  const before = t.lv;
+  t.xp = Math.max(0, Math.round(t.xp + n)); t.lv = levelFor(t.xp);
+  if (t.lv > before) t.hp += (maxHp(t) - (CONFIG.hp + t.st[3] * CONFIG.hpPerPoint + before * 2)); // the level's extra health comes full
+  return t.lv - before;
+}
+/** Spend one point on stat i (0..3) if there's a point and room. */
+function upgrade(t, i) {
+  if (pointsLeft(t) <= 0 || t.st[i] >= CONFIG.maxStat) return false;
+  t.st[i]++;
+  if (i === 3) t.hp += CONFIG.hpPerPoint;
+  return true;
+}
+/** Fire every barrel. Returns the new shots as [x, y, angle]; the caller flies and sends them. */
+function fire(t) {
+  const c = CLASSES[t.cl], r = tankR(t.lv), out = [];
+  for (const [ang, side, len] of c.barrels) {
+    const base = t.a + ang, a = base + (Math.random() - 0.5) * 2 * c.spread;
+    out.push([Math.round(t.x + Math.cos(base) * r * len - Math.sin(base) * r * side), Math.round(t.y + Math.sin(base) * r * len + Math.cos(base) * r * side), +a.toFixed(3)]);
+  }
+  t.cd = reloadOf(t); t.firedAt = performance.now();
+  const kick = 18 * c.damage * c.barrels.length; t.vx -= Math.cos(t.a) * kick; t.vy -= Math.sin(t.a) * kick; // recoil
+  return out;
+}
+/** Keep a tank in the arena and out of the shapes (it shoves them aside on the host). */
+function pushOut(t, list) {
+  const r = tankR(t.lv);
+  for (const s of list) {
+    const d = dist(t, s), min = r + SHAPES[s.k].r * 0.9;
+    if (d < min && d > 0.01) { const k = (min - d) / d; t.x += (t.x - s.x) * k * 0.6; t.y += (t.y - s.y) * k * 0.6; if (s.vx !== undefined) { s.vx -= (t.x - s.x) / d * 40; s.vy -= (t.y - s.y) / d * 40; } }
+  }
+  t.x = Math.max(r, Math.min(M - r, t.x)); t.y = Math.max(r, Math.min(M - r, t.y));
+}
+
+// ── BULLETS ─────────────────────────────────────────────────────────────────────────
+const bullets = [];
+function addBullet(owner, x, y, a, speed, dmg, r, ago = 0) {
+  const t = tankById(owner), b = { owner, x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: CONFIG.bulletLife, r, d: dmg, late: 0, color: t ? t.color : "#888" };
+  b.late = Math.min(0.15, Math.max(0, ago / 1000)); // it left the barrel `ago` ms ago: it flies that much extra (checking hits) on its first frames
+  bullets.push(b);
+  const v = views.get(owner); if (v) v.firedAt = performance.now();
+}
+/** Move every bullet. Shapes and tanks stop them. Who gets hurt is decided by the one hit (the host for shapes and bots). */
+function stepBullets(dt) {
+  const tanks = allTanks().filter((t) => !t.dead), shapes = shapeList(), now = Date.now();
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i], step = dt + b.late * 0.5, n = Math.ceil((Math.hypot(b.vx, b.vy) * step) / 16); // small sub-steps: fast bullets can't skip a shape
+    b.late *= 0.5;
+    let gone = (b.life -= step) <= 0;
+    for (let k = 0; k < n && !gone; k++) {
+      b.x += b.vx * step / n; b.y += b.vy * step / n;
+      if (b.x < 0 || b.y < 0 || b.x > M || b.y > M) { gone = true; break; }
+      for (const s of shapes) {
+        if (gone || (b.x - s.x) ** 2 + (b.y - s.y) ** 2 > (SHAPES[s.k].r + b.r) ** 2) continue;
+        gone = true; spark(b.x, b.y, SHAPES[s.k].color, 5);
+        if (world.acting) hitShape(s, b);
+      }
+      for (const t of tanks) {
+        if (gone || t.id === b.owner || (b.x - t.x) ** 2 + (b.y - t.y) ** 2 > (tankR(t.lv) + b.r) ** 2) continue;
+        gone = true; spark(b.x, b.y, t.color, 7);
+        if (now < t.shieldUntil || t.sh) continue;
+        if (t === me) takeHit(b.owner, b.d);                       // me: my own fact
+        else if (t.bot && world.acting) hitBot(t, b.owner, b.d);  // a bot: the host decides
+        else if (b.owner === me.id) sfx("tick");
+      }
+    }
+    if (gone) bullets.splice(i, 1);
+  }
+}
+
+// ── WORLD (HOST) ────────────────────────────────────────────────────────────────────
+const world = { acting: false, shapes: new Map(), nextId: 1, bots: new Map(), lastShapes: 0, lastBots: 0, lastSpawn: 0, shots: [] };
+function adoptWorld() {
+  world.acting = true; world.shapes.clear(); world.bots.clear();
+  for (const [id, k, x, y, hp] of parseOnce("shapes", S.shared.shapes, [])) if (SHAPES[k]) world.shapes.set(id, { id, k, x, y, hp, vx: 0, vy: 0, flash: 0 });
+  world.nextId = Math.max(0, ...world.shapes.keys()) + 1;
+  for (const b of parseOnce("bots", S.shared.bots, [])) {
+    const t = Object.assign(newTank(b.i, b.n, b.c), { x: b.x, y: b.y, a: b.a, hp: b.hp, xp: b.xp, cl: CLASSES[b.cl] ? b.cl : "basic", dead: b.d, bot: true });
+    t.lv = levelFor(t.xp); t.st = Array.isArray(b.st) ? b.st.slice(0, 4) : [0, 0, 0, 0]; t.respawnAt = Date.now() + CONFIG.respawnMs; brainFor(t);
+    world.bots.set(t.id, t);
+  }
+}
+/** A new shape somewhere open; pentagons like the middle of the map. */
+function spawnShape() {
+  const roll = Math.random(), k = roll < SHAPES[2].share ? 2 : roll < SHAPES[2].share + SHAPES[1].share ? 1 : 0;
+  for (let tries = 0; tries < 20; tries++) {
+    const mid = k === 2 && Math.random() < 0.6, x = mid ? M / 2 + rnd(-M * 0.15, M * 0.15) : rnd(60, M - 60), y = mid ? M / 2 + rnd(-M * 0.15, M * 0.15) : rnd(60, M - 60);
+    if (allTanks().some((t) => !t.dead && Math.hypot(t.x - x, t.y - y) < 160)) continue;
+    const id = world.nextId++;
+    world.shapes.set(id, { id, k, x, y, hp: SHAPES[k].hp, vx: rnd(-8, 8), vy: rnd(-8, 8), flash: 0 });
+    return;
+  }
+}
+/** A bullet hit a shape (on the host's screen). Breaking it pays its xp to the bullet's owner. */
+function hitShape(s, b) {
+  if (!world.shapes.has(s.id)) return;
+  s.hp -= b.d; s.flash = performance.now();
+  const sp = Math.hypot(b.vx, b.vy) || 1; s.vx += b.vx / sp * 70 * (s.k === 2 ? 0.4 : 1); s.vy += b.vy / sp * 70 * (s.k === 2 ? 0.4 : 1);
+  if (s.hp > 0) return;
+  world.shapes.delete(s.id);
+  popShape(s);
+  const xp = SHAPES[s.k].xp, bot = world.bots.get(b.owner);
+  if (b.owner === me.id) earn(xp, s.x, s.y);
+  else if (bot) gainXp(bot, xp);
+  else net.send("xp", { to: b.owner, n: xp, x: Math.round(s.x), y: Math.round(s.y) });
+}
+/** Someone's bullet hit a bot (on the host's screen). */
+function hitBot(b, by, dmg) {
+  if (b.dead) return;
+  b.hp -= dmg; b.hurtAt = performance.now();
+  if (b.hp > 0) return;
+  Object.assign(b, { hp: 0, dead: 1, respawnAt: Date.now() + CONFIG.respawnMs });
+  const msg = { v: b.id, by, xp: Math.round(b.xp * CONFIG.killXp + 20) };
+  net.send("down", msg); onDown(msg);
+}
+function newBot() {
+  const names = new Set(allTanks().map((t) => t.name)), used = new Set(allTanks().map((t) => t.color)), id = "b" + Math.random().toString(36).slice(2, 6);
+  const b = Object.assign(newTank(id, BOT_NAMES.find((n) => !names.has(n)) || "Bot", COLORS.find((c) => !used.has(c)) || pick(COLORS)), { bot: true });
+  brainFor(b); spawnBot(b);
+  return b;
+}
+/** A bot (re)joins at a random level with its points already spent. */
+function spawnBot(b) {
+  const at = openSpot(), lv = Math.floor(rnd(CONFIG.botLevel[0], CONFIG.botLevel[1] + 1));
+  Object.assign(b, { x: at.x, y: at.y, vx: 0, vy: 0, xp: xpFor(lv), lv, st: [0, 0, 0, 0], cl: "basic", dead: 0, shieldUntil: Date.now() + CONFIG.shieldMs, cd: 0 });
+  botSpend(b); b.hp = maxHp(b);
+}
+/** Bots fill the arena up to CONFIG.seats; one leaves when a person joins. A bot never wears a person's color. */
+function fitBots() {
+  const humans = livePlayers().filter((id) => !(ATTRACT && id === me.id)).length, want = Math.max(0, CONFIG.seats - humans);
+  const people = new Set(allTanks().filter((t) => !t.bot).map((t) => t.color));
+  for (const b of world.bots.values()) if (people.has(b.color)) { const used = new Set(allTanks().map((t) => t.color)); b.color = COLORS.find((c) => !used.has(c)) || b.color; }
+  if (world.bots.size > want) world.bots.delete([...world.bots.keys()].pop());
+  if (world.bots.size < want && performance.now() - world.lastSpawn > 500) { world.lastSpawn = performance.now(); const b = newBot(); world.bots.set(b.id, b); }
+}
+function openSpot() {
+  let best = { x: M / 2, y: M / 2 }, bd = -1;
+  for (let i = 0; i < 12; i++) {
+    const p = { x: rnd(120, M - 120), y: rnd(120, M - 120) }, d = Math.min(9999, ...allTanks().filter((t) => !t.dead).map((t) => dist(t, p))) + Math.random() * 200;
+    if (d > bd) { bd = d; best = p; }
+  }
+  return best;
+}
+
+function hostTick(dt, now) {
+  if (!world.acting) adoptWorld();
+  fitBots();
+  for (let i = 0; i < 6 && world.shapes.size < CONFIG.shapes; i++) spawnShape(); // a few per frame (a spot may not be free)
+  const tanks = allTanks().filter((t) => !t.dead);
+  for (const s of world.shapes.values()) { // shapes drift, get shoved, slow down, stay in the arena
+    const k = Math.exp(-1.5 * dt), r = SHAPES[s.k].r;
+    s.vx = s.vx * k + rnd(-6, 6) * dt; s.vy = s.vy * k + rnd(-6, 6) * dt;
+    s.x = Math.max(r, Math.min(M - r, s.x + s.vx * dt)); s.y = Math.max(r, Math.min(M - r, s.y + s.vy * dt));
+  }
+  const t = Date.now(), shapes = [...world.shapes.values()];
+  for (const b of world.bots.values()) stepBot(b, dt, t, tanks, shapes);
+  if (now - world.lastBots > 100) { // ~10/s, one message for every bot, and their shots
+    world.lastBots = now;
+    net.setShared("bots", JSON.stringify([...world.bots.values()].map((b) => ({ i: b.id, n: b.name, c: b.color, x: Math.round(b.x), y: Math.round(b.y), vx: Math.round(b.vx), vy: Math.round(b.vy),
+      a: +b.a.toFixed(2), hp: Math.round(b.hp), mhp: maxHp(b), xp: b.xp, st: b.st, cl: b.cl, d: b.dead, sh: t < b.shieldUntil ? 1 : 0 }))));
+    if (world.shots.length) { net.send("shots", { list: world.shots.splice(0, 40).map((s) => [...s.slice(0, 7), Math.round(now - s[7])]) }); world.shots.length = 0; }
+  }
+  if (now - world.lastShapes > 250) { // the shapes, 4 times a second
+    world.lastShapes = now;
+    net.setShared("shapes", JSON.stringify(shapes.map((s) => [s.id, s.k, Math.round(s.x), Math.round(s.y), Math.max(0, Math.round(s.hp))])));
+  }
+}
+
+// ── BOT BRAIN ───────────────────────────────────────────────────────────────────────
+// Each bot has a favorite build and a temper. It farms shapes, fights tanks its size or smaller,
+// strafes while it shoots, and runs when it's hurt.
+function brainFor(b) {
+  const builds = [[2, 1, 2, 1, 3, 0], [1, 2, 1, 3, 2, 0], [3, 2, 3, 1, 0, 2], [0, 1, 2, 0, 1, 2, 3]];
+  Object.assign(b, { build: pick(builds), aggr: rnd(...CONFIG.botAggr), target: null, thinkAt: 0, wp: null, seed: Math.random() * 9 });
+}
+function botSpend(b) {
+  for (let guard = 0; pointsLeft(b) > 0 && guard < 60; guard++) if (!upgrade(b, b.build[guard % b.build.length])) upgrade(b, guard % 4);
+  if (b.lv >= CONFIG.classAt && b.cl === "basic") b.cl = pick(PICKS);
+}
+function stepBot(b, dt, t, tanks, shapes) {
+  if (b.dead) { if (t >= b.respawnAt) spawnBot(b); return; }
+  botSpend(b);
+  if (performance.now() - b.hurtAt > 3000) b.hp = Math.min(maxHp(b), b.hp + maxHp(b) * CONFIG.regen * dt);
+  if (t > b.thinkAt) { // pick something to shoot about twice a second
+    b.thinkAt = t + 450;
+    let foe = null, fd = CONFIG.botRange;
+    for (const o of tanks) { if (o.id === b.id || t < o.shieldUntil || o.sh) continue; const d = dist(o, b); if (d < fd && (o.lv <= b.lv + 3 || Math.random() < b.aggr * 0.5)) { fd = d; foe = o; } }
+    let prey = null, pv = 0;
+    for (const s of shapes) { const v = SHAPES[s.k].xp / (dist(s, b) + 80); if (v > pv) { pv = v; prey = s; } }
+    b.flee = b.hp < maxHp(b) * 0.3 && foe;
+    b.target = foe && (Math.random() < b.aggr || b.target === foe.id) ? { id: foe.id, tank: true } : prey ? { id: prey.id, tank: false } : null;
+  }
+  const tg = !b.target ? null : b.target.tank ? tanks.find((o) => o.id === b.target.id) : shapes.find((s) => s.id === b.target.id);
+  let mx = 0, my = 0;
+  if (tg) {
+    const d = dist(tg, b), ang = Math.atan2(tg.y - b.y, tg.x - b.x);
+    const keep = b.target.tank ? (b.cl === "sniper" ? 520 : 340) : 190, side = Math.sin(t / 900 + b.seed) > 0 ? 1 : -1;
+    const close = b.flee ? -1.2 : d > keep + 60 ? 1 : d < keep - 60 ? -0.8 : 0;
+    mx = Math.cos(ang) * close + Math.cos(ang + Math.PI / 2) * side * (b.target.tank ? 0.8 : 0.3); my = Math.sin(ang) * close + Math.sin(ang + Math.PI / 2) * side * (b.target.tank ? 0.8 : 0.3);
+    const lead = d / bulletSpeedOf(b), aimAt = Math.atan2(tg.y + (tg.vy || 0) * lead - b.y, tg.x + (tg.vx || 0) * lead - b.x) + Math.sin(t / 300 + b.seed) * CONFIG.botAim;
+    const diff = Math.atan2(Math.sin(aimAt - b.a), Math.cos(aimAt - b.a));
+    b.a += Math.max(-7 * dt, Math.min(7 * dt, diff));
+    b.cd -= dt;
+    if (Math.abs(diff) < 0.25 && b.cd <= 0 && d < (b.cl === "sniper" ? 900 : 640)) {
+      const now = performance.now();
+      for (const [x, y, a] of fire(b)) { addBullet(b.id, x, y, a, bulletSpeedOf(b), damageOf(b), bulletR(b)); world.shots.push([b.id, x, y, a, Math.round(bulletSpeedOf(b)), +damageOf(b).toFixed(1), +bulletR(b).toFixed(1), now]); }
+    }
+  } else {
+    if (!b.wp || dist(b.wp, b) < 60) b.wp = { x: rnd(100, M - 100), y: rnd(100, M - 100) };
+    mx = b.wp.x - b.x; my = b.wp.y - b.y; b.a = Math.atan2(my, mx);
+  }
+  const len = Math.hypot(mx, my) || 1, sp = speedOf(b) * 0.9, k = Math.min(1, dt * 6);
+  b.vx += (mx / len * sp * Math.min(1, Math.hypot(mx, my)) - b.vx) * k; b.vy += (my / len * sp * Math.min(1, Math.hypot(mx, my)) - b.vy) * k;
+  b.x += b.vx * dt; b.y += b.vy * dt;
+  for (const o of tanks) { // tanks bump, they don't overlap
+    if (o === b) continue;
+    const d = dist(o, b), min = tankR(o.lv) + tankR(b.lv);
+    if (d < min && d > 0.01) { b.x += (b.x - o.x) / d * (min - d) * 0.5; b.y += (b.y - o.y) / d * (min - d) * 0.5; }
+  }
+  pushOut(b, shapes);
+}
+
+// ── ME ──────────────────────────────────────────────────────────────────────────────
+const myName = (() => { try { return localStorage.getItem("mpa-name") || ""; } catch { return ""; } })() ||
+  pick(["Iron", "Rapid", "Heavy", "Lucky", "Turbo", "Steel"]) + " " + pick(["Tank", "Cannon", "Turret", "Gunner", "Treads", "Shell"]);
+const me = Object.assign(newTank("", myName, COLORS[0]), { mine: true, best: 0, respawnAt: 0, lastSend: 0, lastSubmit: 0, submitted: 0, killer: "", shots: [], lastShots: 0, auto: false, brain: null });
+const input = { mx: 0, my: 0, fire: false };
+
+function spawnMe() {
+  const at = world.acting ? openSpot() : { x: rnd(200, M - 200), y: rnd(200, M - 200) };
+  Object.assign(me, { x: at.x, y: at.y, vx: 0, vy: 0, xp: 0, lv: 1, st: [0, 0, 0, 0], cl: "basic", dead: 0, shieldUntil: Date.now() + CONFIG.shieldMs, cd: 0, best: 0, kills: 0, killer: "" });
+  if (ATTRACT) { me.xp = xpFor(14); me.lv = 14; me.cl = "gunner"; me.brain = Object.assign(newTank("local", myName, me.color), { bot: false }); brainFor(me.brain); me.build = me.brain.build; botSpend(me); }
+  me.hp = maxHp(me);
+  cam.x = me.x; cam.y = me.y;
+  $("over").hidden = true;
+  publish(true);
+}
+/** Score for me (a shape I broke, a tank I destroyed). */
+function earn(n, x, y) {
+  const ups = gainXp(me, n);
+  fx.texts.push({ text: `+${n}`, x, y, color: "#e0a800", life: 1 });
+  if (ups) { toast(`Level ${me.lv}!`); sfx("level"); rings.push({ x: me.x, y: me.y, t: 0, color: "#ffd23f" }); }
+  publish(true);
+}
+/** A bullet from `by` touched me on MY screen: I take the damage, and say so if it was the last of me. */
+function takeHit(by, dmg) {
+  if (me.dead || Date.now() < me.shieldUntil) return;
+  me.hp -= Math.max(0, Math.min(400, Number(dmg) || 0)); me.hurtAt = performance.now(); sfx("hurt");
+  if (me.hp <= 0) {
+    Object.assign(me, { hp: 0, dead: 1, killer: nameOf(by), respawnAt: Date.now() + CONFIG.respawnMs });
+    const msg = { v: me.id, by, xp: Math.round(me.xp * CONFIG.killXp + 20) };
+    net.send("down", msg); onDown(msg);
+    if (ATTRACT) setTimeout(spawnMe, CONFIG.respawnMs); else showOver();
+  }
+  publish(true);
+}
+/** Someone was destroyed: a feed line for everyone, the score for the killer. */
+function onDown(msg) {
+  if (!msg || !msg.v) return;
+  const v = tankById(msg.v), k = tankById(msg.by);
+  if (v) explode(v.x, v.y, v.color);
+  feed.unshift({ text: `${nameOf(msg.by)} destroyed ${nameOf(msg.v)}`, color: k ? k.color : "#2a3142", at: performance.now() });
+  feed.length = Math.min(feed.length, 4);
+  const xp = Math.max(0, Math.min(50000, Number(msg.xp) || 0));
+  if (msg.by === me.id && msg.v !== me.id && !me.dead) { me.kills++; earn(xp, v ? v.x : me.x, v ? v.y : me.y); toast(`You destroyed ${nameOf(msg.v)}!`); sfx("kill"); }
+  if (world.acting) { const b = world.bots.get(msg.by); if (b) gainXp(b, xp); }
+}
+function shoot() {
+  const now = performance.now();
+  for (const [x, y, a] of fire(me)) { addBullet(me.id, x, y, a, bulletSpeedOf(me), damageOf(me), bulletR(me)); me.shots.push([x, y, a, now]); }
+  sfx("shot");
+}
+function myTick(dt) {
+  const t = Date.now(), now = performance.now();
+  if (me.dead) { publish(false); return; }
+  if (now - me.hurtAt > 3000) me.hp = Math.min(maxHp(me), me.hp + maxHp(me) * CONFIG.regen * dt);
+  me.cd -= dt;
+  if (ATTRACT) { // the preview plays you with the bot brain
+    const shotsBefore = world.shots.length, b = me.brain;
+    Object.assign(b, { x: me.x, y: me.y, vx: me.vx, vy: me.vy, a: me.a, hp: me.hp, xp: me.xp, lv: me.lv, st: me.st, cl: me.cl, cd: me.cd, dead: 0, shieldUntil: me.shieldUntil, hurtAt: me.hurtAt });
+    const firing = bullets.length;
+    stepBot(b, dt, t, allTanks().filter((o) => !o.dead && o !== me), shapeList());
+    for (const bl of bullets.slice(firing)) if (bl.owner === "local") bl.color = me.color;
+    world.shots.length = shotsBefore;
+    Object.assign(me, { x: b.x, y: b.y, vx: b.vx, vy: b.vy, a: b.a, cd: b.cd });
+  } else {
+    const len = Math.hypot(input.mx, input.my), k = len > 1 ? 1 / len : 1, sp = speedOf(me), ease = Math.min(1, dt * 7);
+    me.vx += (input.mx * k * sp - me.vx) * ease; me.vy += (input.my * k * sp - me.vy) * ease;
+    me.x += me.vx * dt; me.y += me.vy * dt;
+    if ((input.fire || me.auto) && me.cd <= 0) shoot();
+  }
+  pushOut(me, shapeList());
+  for (const o of allTanks()) { // tanks bump, they don't overlap
+    if (o === me || o.dead) continue;
+    const d = dist(o, me), min = tankR(o.lv) + tankR(me.lv);
+    if (d < min && d > 0.01) { me.x += (me.x - o.x) / d * (min - d) * 0.5; me.y += (me.y - o.y) / d * (min - d) * 0.5; }
+  }
+  me.best = Math.max(me.best, me.xp);
+  if (board && me.best > me.submitted && now - me.lastSubmit > 30000) { me.lastSubmit = now; me.submitted = me.best; board.submit(me.best).catch(() => null); }
+  if (me.shots.length && now - me.lastShots > 100) { // my shots, batched 10 times a second
+    me.lastShots = now;
+    net.send("shot", { b: me.shots.splice(0, 20).map(([x, y, a, at]) => [x, y, a, Math.round(now - at)]), s: Math.round(bulletSpeedOf(me)), d: +damageOf(me).toFixed(1), r: +bulletR(me).toFixed(1) });
+    me.shots.length = 0;
+  }
+  publish(false);
+}
+function publish(force) {
+  const now = performance.now();
+  if (!force && now - me.lastSend < 100) return; // ~10/s
+  me.lastSend = now;
+  net.me.set("p", JSON.stringify({ x: Math.round(me.x), y: Math.round(me.y), vx: Math.round(me.vx), vy: Math.round(me.vy), a: +me.a.toFixed(2), hp: Math.round(me.hp), mhp: maxHp(me),
+    xp: me.xp, cl: me.cl, d: me.dead, sh: Date.now() < me.shieldUntil ? 1 : 0 }));
+}
+/** The colors the bots wear right now (from the shared bots field: it works before any frame has run). */
+const botColors = () => parse(S.shared.bots, []).map((b) => b && b.c);
+/** Two people in one color: the one with the higher sessionId picks a color nobody (and no bot) wears. */
+function fixColor() {
+  const others = Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId);
+  if (!others.some(([id, p]) => p.c === me.color && id < net.sessionId)) return;
+  const taken = new Set([...others.map(([, p]) => p.c), ...botColors()]), free = COLORS.find((c) => !taken.has(c));
+  if (free) { me.color = free; net.me.set("c", free); }
+}
+
+// ── OTHERS ──────────────────────────────────────────────────────────────────────────
+const views = new Map();       // id -> someone else's tank (a person, or a bot on a non-host screen), eased toward its snapshots
+const shapeViews = new Map();  // id -> a shape on a non-host screen, eased
+function syncViews(dt) {
+  const k = 1 - Math.pow(0.0005, dt), seen = new Set(), live = new Set(livePlayers()), now = performance.now();
+  const add = (id, q, name, color, bot) => {
+    if (!q || typeof q.x !== "number") return;
+    seen.add(id);
+    let v = views.get(id);
+    if (!v) { v = { id, bot, x: q.x, y: q.y, a: q.a || 0, firedAt: -1e9, hurtAt: -1e9, raw: null }; views.set(id, v); }
+    if (v.dead && !q.d) { v.x = q.x; v.y = q.y; } // respawned: no easing across the map
+    if (q.hp < v.hp) v.hurtAt = now;
+    Object.assign(v, { name, color, vx: q.vx || 0, vy: q.vy || 0, hp: q.hp, mhp: q.mhp || 100, xp: q.xp || 0, lv: levelFor(q.xp || 0), cl: CLASSES[q.cl] ? q.cl : "basic", dead: q.d ? 1 : 0, sh: q.sh ? 1 : 0, shieldUntil: 0, raw: q });
+    const tx = q.x + v.vx * 0.05, ty = q.y + v.vy * 0.05; // a touch ahead: snapshots are ~100ms old
+    v.x += (tx - v.x) * k; v.y += (ty - v.y) * k; v.a += Math.atan2(Math.sin(q.a - v.a), Math.cos(q.a - v.a)) * Math.min(1, k * 1.5);
+  };
+  for (const [id, p] of Object.entries(S.entities.players || {})) if (id !== net.sessionId && live.has(id)) add(id, parseOnce("p:" + id, p.p, null), p.n || "Player", p.c || "#888", false);
+  if (!world.acting) for (const b of parseOnce("bots", S.shared.bots, [])) add(b.i, b, b.n, b.c, true);
+  for (const id of views.keys()) if (!seen.has(id)) views.delete(id);
+  // shapes (the host uses its own)
+  if (world.acting) { shapeViews.clear(); return; }
+  const ids = new Set();
+  for (const [id, kind, x, y, hp] of parseOnce("shapes", S.shared.shapes, [])) {
+    if (!SHAPES[kind]) continue;
+    ids.add(id);
+    let s = shapeViews.get(id);
+    if (!s) { s = { id, k: kind, x, y, hp, flash: 0 }; shapeViews.set(id, s); }
+    if (hp < s.hp) s.flash = now;
+    s.hp = hp; s.x += (x - s.x) * k; s.y += (y - s.y) * k;
+  }
+  for (const [id, s] of shapeViews) if (!ids.has(id)) { shapeViews.delete(id); popShape(s); }
+}
+const shapeList = () => (world.acting ? [...world.shapes.values()] : [...shapeViews.values()]);
+/** Every tank this screen knows about: others (eased), the host's own bots, and me. */
+function allTanks() {
+  const out = [...views.values()].filter((v) => !(world.acting && v.bot)); // just became host: its own bots replace the snapshots
+  if (world.acting) out.push(...world.bots.values());
+  out.push(me);
+  return out;
+}
+const tankById = (id) => allTanks().find((t) => t.id === id);
+const nameOf = (id) => (id === me.id ? "You" : (tankById(id) || {}).name || "Someone");
+
+// ── DRAW ────────────────────────────────────────────────────────────────────────────
+const cv = document.getElementById("game"), ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+function fit() { DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; }
+addEventListener("resize", fit); addEventListener("orientationchange", fit); fit();
+const cam = { x: M / 2, y: M / 2, z: 1, shake: 0 };
+const zoom = () => Math.sqrt(W * H) / (ATTRACT ? 640 : 950) / (CLASSES[me.cl].view * (1 + me.lv * 0.008));
+const fx = { parts: [], texts: [] }, rings = [];
+const shadeCache = new Map();
+function shade(hex, k = 0.72) {
+  const key = hex + k;
+  if (!shadeCache.has(key)) { const n = parseInt(hex.slice(1), 16) || 0; shadeCache.set(key, `rgb(${(((n >> 16) & 255) * k) | 0},${(((n >> 8) & 255) * k) | 0},${((n & 255) * k) | 0})`); }
+  return shadeCache.get(key);
+}
+function spark(x, y, color, n) { for (let i = 0; i < n; i++) { const a = rnd(0, Math.PI * 2), s = rnd(60, 220); fx.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rnd(0.2, 0.45), color, s: rnd(3, 6) }); } }
+function popShape(s) { spark(s.x, s.y, SHAPES[s.k].color, s.k === 2 ? 26 : 12); rings.push({ x: s.x, y: s.y, t: 0, color: SHAPES[s.k].color }); if (dist(s, me) < 500) sfx("pop"); }
+function explode(x, y, color) { spark(x, y, color, 40); spark(x, y, "#ffffff", 12); rings.push({ x, y, t: 0, color }); if (Math.hypot(x - me.x, y - me.y) < 500) cam.shake = 10; }
+
+function draw(dt, now) {
+  const z = zoom();
+  cam.z += (z - cam.z) * Math.min(1, dt * 3);
+  cam.x += (me.x - cam.x) * Math.min(1, dt * (ATTRACT ? 4 : 9)); cam.y += (me.y - cam.y) * Math.min(1, dt * (ATTRACT ? 4 : 9));
+  for (const [k, view] of [["x", W / cam.z], ["y", H / cam.z]]) cam[k] = view >= M + 160 ? M / 2 : Math.max(view / 2 - 80, Math.min(M - view / 2 + 80, cam[k])); // never show far past the edge
+  cam.shake = Math.max(0, cam.shake - dt * 30);
+  const sx = rnd(-1, 1) * cam.shake, sy = rnd(-1, 1) * cam.shake;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = "#c9ced8"; ctx.fillRect(0, 0, W, H);
+  ctx.setTransform(DPR * cam.z, 0, 0, DPR * cam.z, DPR * (W / 2 - cam.x * cam.z + sx), DPR * (H / 2 - cam.y * cam.z + sy));
+  // the arena: floor, grid, the middle (where pentagons gather), the edge
+  ctx.fillStyle = "#eceff3"; ctx.fillRect(0, 0, M, M);
+  ctx.fillStyle = "#e1e5ec"; ctx.fillRect(M * 0.35, M * 0.35, M * 0.3, M * 0.3);
+  const vx0 = Math.max(0, cam.x - W / 2 / cam.z), vx1 = Math.min(M, cam.x + W / 2 / cam.z), vy0 = Math.max(0, cam.y - H / 2 / cam.z), vy1 = Math.min(M, cam.y + H / 2 / cam.z);
+  ctx.strokeStyle = "#d5dae2"; ctx.lineWidth = 2; ctx.beginPath();
+  for (let g = Math.ceil(vx0 / 40) * 40; g <= vx1; g += 40) { ctx.moveTo(g, vy0); ctx.lineTo(g, vy1); }
+  for (let g = Math.ceil(vy0 / 40) * 40; g <= vy1; g += 40) { ctx.moveTo(vx0, g); ctx.lineTo(vx1, g); }
+  ctx.stroke();
+  ctx.strokeStyle = "#2a3142"; ctx.lineWidth = 8; ctx.strokeRect(-4, -4, M + 8, M + 8);
+  const t = now / 1000;
+  for (const s of shapeList()) drawShape(s, t, now);
+  for (const b of bullets) {
+    ctx.fillStyle = b.color; ctx.strokeStyle = shade(b.color, 0.7); ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  for (const tk of allTanks()) if (!tk.dead) drawTank(tk, now);
+  for (let i = rings.length - 1; i >= 0; i--) {
+    const r = rings[i]; r.t += dt; if (r.t > 0.45) { rings.splice(i, 1); continue; }
+    ctx.globalAlpha = 1 - r.t / 0.45; ctx.strokeStyle = r.color; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(r.x, r.y, 20 + r.t * 200, 0, Math.PI * 2); ctx.stroke();
+  }
+  for (let i = fx.parts.length - 1; i >= 0; i--) {
+    const p = fx.parts[i]; p.life -= dt; if (p.life <= 0) { fx.parts.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.92; p.vy *= 0.92;
+    ctx.globalAlpha = Math.min(1, p.life * 3); ctx.fillStyle = p.color; ctx.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s);
+  }
+  ctx.globalAlpha = 1; ctx.textAlign = "center"; ctx.lineJoin = "round"; ctx.font = "900 24px system-ui, sans-serif";
+  for (let i = fx.texts.length - 1; i >= 0; i--) {
+    const f = fx.texts[i]; f.life -= dt; if (f.life <= 0) { fx.texts.splice(i, 1); continue; }
+    f.y -= 40 * dt; ctx.globalAlpha = Math.min(1, f.life * 2);
+    ctx.lineWidth = 5; ctx.strokeStyle = "#fff"; ctx.strokeText(f.text, f.x, f.y); ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+  // screen space: a red edge when I'm hurt, the minimap
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const hurt = now - me.hurtAt;
+  if (hurt < 300 && !ATTRACT) { const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7); g.addColorStop(0, "#ff000000"); g.addColorStop(1, `rgba(255,40,60,${0.45 * (1 - hurt / 300)})`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  drawMinimap();
+}
+function polygon(x, y, r, sides, rot) {
+  ctx.beginPath();
+  for (let i = 0; i < sides; i++) { const a = rot + (i / sides) * Math.PI * 2; ctx[i ? "lineTo" : "moveTo"](x + Math.cos(a) * r, y + Math.sin(a) * r); }
+  ctx.closePath();
+}
+function drawShape(s, t, now) {
+  const def = SHAPES[s.k], rot = s.id * 1.7 + t * (s.id % 2 ? 0.35 : -0.35), hit = now - s.flash < 90;
+  polygon(s.x, s.y, def.r, def.sides, rot);
+  ctx.fillStyle = hit ? "#ffffff" : def.color; ctx.fill(); ctx.lineWidth = 4; ctx.lineJoin = "round"; ctx.strokeStyle = shade(def.color, 0.72); ctx.stroke();
+  if (s.hp < def.hp && !ATTRACT) {
+    const w = def.r * 1.8; ctx.fillStyle = "#2a314288"; ctx.fillRect(s.x - w / 2, s.y + def.r + 8, w, 5);
+    ctx.fillStyle = "#7bea8c"; ctx.fillRect(s.x - w / 2, s.y + def.r + 8, w * Math.max(0, s.hp / def.hp), 5);
+  }
+}
+function drawTank(tk, now) {
+  const r = tankR(tk.lv), c = CLASSES[tk.cl] || CLASSES.basic, v = tk === me ? me : views.get(tk.id) || tk;
+  const recoil = Math.max(0, 1 - (now - (v.firedAt || -1e9)) / 120) * r * 0.18;
+  ctx.save(); ctx.translate(tk.x, tk.y); ctx.rotate(tk.a);
+  for (const [ang, side, len, w, tip] of c.barrels) { // barrels: gray with a dark outline
+    ctx.save(); ctx.rotate(ang);
+    const L = r * len - recoil, h0 = r * w / 2, h1 = r * (tip || w) / 2, y0 = r * side;
+    ctx.beginPath(); ctx.moveTo(0, y0 - h0); ctx.lineTo(L, y0 - h1); ctx.lineTo(L, y0 + h1); ctx.lineTo(0, y0 + h0); ctx.closePath();
+    ctx.fillStyle = "#a3a9b6"; ctx.fill(); ctx.lineWidth = 3.5; ctx.lineJoin = "round"; ctx.strokeStyle = "#6b7180"; ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+  const hurt = now - (tk.hurtAt ?? -1e9) < 90;
+  ctx.beginPath(); ctx.arc(tk.x, tk.y, r, 0, Math.PI * 2);
+  ctx.fillStyle = hurt ? "#ffffff" : tk.color; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = shade(tk.color, 0.7); ctx.stroke();
+  const shielded = tk === me ? Date.now() < me.shieldUntil : tk.bot && world.acting ? Date.now() < tk.shieldUntil : tk.sh;
+  if (shielded && Math.floor(now / 120) % 2) { ctx.strokeStyle = "#ffffffcc"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(tk.x, tk.y, r + 8, 0, Math.PI * 2); ctx.stroke(); }
+  const mhp = tk.st ? maxHp(tk) : tk.mhp || 100;
+  if (tk.hp < mhp) {
+    const w = r * 2; ctx.fillStyle = "#2a314299"; ctx.fillRect(tk.x - w / 2, tk.y + r + 9, w, 6);
+    ctx.fillStyle = tk.hp > mhp * 0.35 ? "#7bea8c" : "#ff5d5d"; ctx.fillRect(tk.x - w / 2, tk.y + r + 9, w * Math.max(0, tk.hp / mhp), 6);
+  }
+  ctx.font = "800 14px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.lineJoin = "round"; ctx.lineWidth = 4; ctx.strokeStyle = "#ffffffdd";
+  const label = tk === me ? (ATTRACT ? myName : "You") : tk.name;
+  ctx.strokeText(label, tk.x, tk.y - r - 12); ctx.fillStyle = "#2a3142"; ctx.fillText(label, tk.x, tk.y - r - 12);
+  ctx.font = "700 11px system-ui, sans-serif"; ctx.strokeText(`Lv ${tk.lv}`, tk.x, tk.y - r - 27); ctx.fillStyle = "#5b6475"; ctx.fillText(`Lv ${tk.lv}`, tk.x, tk.y - r - 27);
+}
+function drawMinimap() {
+  if (ATTRACT) return;
+  const size = Math.min(120, W * 0.26), x0 = W - size - 14, y0 = H - size - 20, k = size / M;
+  ctx.fillStyle = "#2a3142cc"; ctx.fillRect(x0, y0, size, size);
+  ctx.fillStyle = "#ffffff12"; ctx.fillRect(x0 + size * 0.35, y0 + size * 0.35, size * 0.3, size * 0.3);
+  for (const t of allTanks()) if (!t.dead) { ctx.fillStyle = t === me ? "#fff" : t.color; ctx.beginPath(); ctx.arc(x0 + t.x * k, y0 + t.y * k, t === me ? 3.5 : 2.5, 0, Math.PI * 2); ctx.fill(); }
+}
+
+// ── HUD & OVER ──────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const feed = [];
+let board = null, netDown = false, startedAt = 0, toastUntil = 0;
+function toast(text) { if (ATTRACT) return; $("toast").textContent = text; $("toast").style.opacity = 1; toastUntil = performance.now() + 1500; }
+
+// The upgrade panel: four stat rows (built once), shown while you have points to spend.
+const statBtns = STATS.map((name, i) => {
+  const b = document.createElement("button");
+  b.innerHTML = `<em>${name}</em><u>${"<i></i>".repeat(CONFIG.maxStat)}</u><kbd>${i + 1}</kbd>`;
+  b.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); spend(i); });
+  $("ups").appendChild(b);
+  return b;
+});
+const pickBtns = PICKS.map((cl, i) => {
+  const b = document.createElement("button"), icon = document.createElement("canvas");
+  icon.width = icon.height = 112; b.appendChild(icon); b.append(CLASSES[cl].name);
+  b.insertAdjacentHTML("beforeend", ` <kbd>${i + 5}</kbd>`);
+  b.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); choose(cl); });
+  $("pick").appendChild(b);
+  return { b, icon, cl };
+});
+function spend(i) { if (!me.dead && upgrade(me, i)) { sfx("up"); publish(true); hud(performance.now()); } }
+function choose(cl) { if (!me.dead && me.lv >= CONFIG.classAt && me.cl === "basic") { me.cl = cl; sfx("level"); toast(`You're a ${CLASSES[cl].name} now`); publish(true); hud(performance.now()); } }
+
+function hud(now) {
+  if (ATTRACT) { for (const id of ["score", "top", "feed", "toast", "hint", "net"]) $(id).textContent = ""; $("xpbar").hidden = true; return; }
+  $("score").innerHTML = me.dead ? "" : `${me.xp.toLocaleString()}<small>Level ${me.lv} ${CLASSES[me.cl].name}${me.kills ? ` · ${me.kills} destroyed` : ""}</small>`;
+  const lo = xpFor(me.lv), hi = xpFor(me.lv + 1), full = me.lv >= CONFIG.maxLevel;
+  $("xpbar").querySelector("i").style.width = `${full ? 100 : Math.max(0, Math.min(100, ((me.xp - lo) / (hi - lo)) * 100))}%`;
+  $("xpbar").querySelector("span").textContent = full ? `Level ${me.lv} · max` : `Level ${me.lv} · ${me.xp - lo} / ${hi - lo} XP`;
+  const pts = pointsLeft(me), picking = !me.dead && me.lv >= CONFIG.classAt && me.cl === "basic";
+  $("ups").hidden = me.dead || pts <= 0 || (picking && touchUI); // on a phone the tank picker takes its place for a moment
+  $("ups").querySelector("h4").textContent = `${pts} upgrade point${pts === 1 ? "" : "s"}`;
+  statBtns.forEach((b, i) => { b.disabled = me.st[i] >= CONFIG.maxStat; b.querySelectorAll("u i").forEach((p, k) => { p.style.background = k < me.st[i] ? STAT_COLORS[i] : ""; }); });
+  if (picking && $("pick").hidden) for (const p of pickBtns) drawIcon(p.icon, p.cl);
+  $("pick").hidden = !picking;
+  const rows = allTanks().filter((t) => !t.dead).map((t) => ({ name: t === me ? "You" : t.name, color: t.color, xp: t.xp, mine: t === me })).sort((a, b) => b.xp - a.xp);
+  $("top").innerHTML = rows.slice(0, 5).map((r) => `<div class="${r.mine ? "me" : ""}"><i style="background:${r.color}"></i><span>${esc(r.name)}</span><b>${r.xp.toLocaleString()}</b></div>`).join("");
+  $("feed").innerHTML = feed.filter((f) => now - f.at < 6000).map((f) => `<div style="color:${shade(f.color, 0.8)}">${esc(f.text)}</div>`).join("");
+  if (now > toastUntil) $("toast").style.opacity = 0;
+  $("hint").style.opacity = now - startedAt < 10000 && !me.dead ? 1 : 0;
+  $("hint").innerHTML = `<span>${touchUI ? "Left thumb moves · right thumb aims and shoots" : "WASD to move · aim with the mouse · hold click to shoot · E auto-fire"}<br>Break shapes for XP, then spend points on upgrades</span>`;
+  const n = livePlayers().length;
+  $("net").textContent = netDown ? "Reconnecting…" : net.offline ? "Offline: playing with bots" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the arena" : ""}`;
+}
+/** A small picture of a tank class for the picker. */
+function drawIcon(cvs, cl) {
+  const g = cvs.getContext("2d"), r = 22, c = CLASSES[cl];
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, 112, 112); g.translate(46, 56); g.rotate(-0.5);
+  for (const [ang, side, len, w, tip] of c.barrels) {
+    g.save(); g.rotate(ang); const L = r * len, h0 = r * w / 2, h1 = r * (tip || w) / 2, y0 = r * side;
+    g.beginPath(); g.moveTo(0, y0 - h0); g.lineTo(L, y0 - h1); g.lineTo(L, y0 + h1); g.lineTo(0, y0 + h0); g.closePath();
+    g.fillStyle = "#a3a9b6"; g.fill(); g.lineWidth = 3; g.strokeStyle = "#6b7180"; g.stroke(); g.restore();
+  }
+  g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fillStyle = me.color; g.fill(); g.lineWidth = 3.5; g.strokeStyle = shade(me.color, 0.7); g.stroke();
+}
+function showOver() {
+  $("overTitle").textContent = me.killer && me.killer !== "Someone" ? `Destroyed by ${me.killer}` : "Destroyed";
+  $("overScore").textContent = `Score ${me.best.toLocaleString()} · level ${me.lv} ${CLASSES[me.cl].name}${me.kills ? ` · ${me.kills} destroyed` : ""}`;
+  $("over").hidden = false;
+  const list = $("board");
+  if (!board) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
+  list.innerHTML = "<li>Loading the leaderboard…</li>";
+  board.submit(me.best).catch(() => null).then(() => board.top(10)).then(({ entries }) => {
+    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${Number(e.score).toLocaleString()}</span></li>`).join("") : "<li>No scores yet. You're first.</li>";
+  }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+}
+$("again").onclick = () => spawnMe();
+
+let audio = null; // made on the first tap or key (browsers block sound before that)
+function sfx(kind) {
+  if (!audio || ATTRACT) return;
+  const [f0, f1, dur, vol, type] = { shot: [300, 140, 0.07, 0.03, "square"], hurt: [160, 60, 0.18, 0.08, "sawtooth"], kill: [440, 990, 0.3, 0.08, "triangle"], tick: [1300, 900, 0.04, 0.03, "square"],
+    pop: [700, 1200, 0.07, 0.03, "sine"], level: [520, 1040, 0.35, 0.08, "triangle"], up: [660, 880, 0.1, 0.06, "sine"] }[kind];
+  const t = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+
+// ── INPUT ───────────────────────────────────────────────────────────────────────────
+const touchUI = matchMedia("(pointer: coarse)").matches && !ATTRACT;
+document.body.classList.toggle("touch", touchUI);
+const keys = new Set(), mouse = { x: 0, y: 0, seen: false, down: false };
+const MOVE = { w: [0, -1], arrowup: [0, -1], s: [0, 1], arrowdown: [0, 1], a: [-1, 0], arrowleft: [-1, 0], d: [1, 0], arrowright: [1, 0] };
+addEventListener("keydown", (e) => {
+  const k = e.key.toLowerCase();
+  try { audio ||= new AudioContext(); } catch {}
+  if (MOVE[k] || k === " ") e.preventDefault();
+  if (!e.repeat) {
+    if (k >= "1" && k <= "4") spend(+k - 1);
+    if (k >= "5" && k <= "7") choose(PICKS[+k - 5]);
+    if (k === "e") { me.auto = !me.auto; toast(me.auto ? "Auto-fire on" : "Auto-fire off"); }
+  }
+  keys.add(k);
+});
+addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+addEventListener("blur", () => { keys.clear(); mouse.down = false; });
+addEventListener("pointerdown", () => { try { audio ||= new AudioContext(); } catch {} }, { once: true });
+// Twin thumb sticks: touch the left half to move, the right half to aim (and shoot).
+const sticks = { move: null, aim: null };
+cv.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  if (e.pointerType === "mouse") { if (e.button === 0) mouse.down = true; return; }
+  const side = e.clientX < innerWidth / 2 ? "move" : "aim";
+  if (sticks[side]) return;
+  sticks[side] = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, el: $(side === "move" ? "stickMove" : "stickAim") };
+  Object.assign(sticks[side].el.style, { left: e.clientX + "px", top: e.clientY + "px" }); sticks[side].el.hidden = false;
+});
+addEventListener("pointermove", (e) => { // the whole window, so aiming works over the upgrade panel too
+  if (e.pointerType === "mouse") { mouse.x = e.clientX; mouse.y = e.clientY; mouse.seen = true; return; }
+  for (const s of Object.values(sticks)) if (s && s.id === e.pointerId) {
+    let dx = e.clientX - s.x0, dy = e.clientY - s.y0; const d = Math.hypot(dx, dy);
+    if (d > 50) { dx *= 50 / d; dy *= 50 / d; }
+    s.dx = dx; s.dy = dy; s.el.firstChild.style.transform = `translate(${dx}px, ${dy}px)`;
+  }
+});
+for (const ev of ["pointerup", "pointercancel"]) addEventListener(ev, (e) => {
+  if (e.pointerType === "mouse") { if (e.button === 0) mouse.down = false; return; }
+  for (const side of ["move", "aim"]) if (sticks[side] && sticks[side].id === e.pointerId) { sticks[side].el.hidden = true; sticks[side] = null; }
+});
+document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+/** Turn keys, mouse and sticks into this frame's move, aim and trigger. Aim goes through the camera that drew the frame. */
+function readInput() {
+  input.mx = input.my = 0;
+  for (const k of keys) if (MOVE[k]) { input.mx += MOVE[k][0]; input.my += MOVE[k][1]; }
+  if (sticks.move) { input.mx = sticks.move.dx / 50; input.my = sticks.move.dy / 50; }
+  const aimLen = sticks.aim ? Math.hypot(sticks.aim.dx, sticks.aim.dy) : 0;
+  if (aimLen > 10) me.a = Math.atan2(sticks.aim.dy, sticks.aim.dx);
+  else if (mouse.seen && !sticks.move) me.a = Math.atan2(cam.y + (mouse.y - H / 2) / cam.z - me.y, cam.x + (mouse.x - W / 2) / cam.z - me.x);
+  else if (input.mx || input.my) me.a = Math.atan2(input.my, input.mx);
+  input.fire = aimLen > 22 || mouse.down || keys.has(" ");
+}
+
+// ── MAIN LOOP ───────────────────────────────────────────────────────────────────────
+let last = performance.now(), lastHb = 0, lastHud = 0;
+function frame(now) {
+  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; // the first frame can be stamped before `last`
+  if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); fixColor(); }
+  if (!isHost()) world.acting = false;
+  syncViews(dt);
+  if (isHost()) hostTick(dt, now);
+  if (me.wantSpawn) { me.wantSpawn = false; spawnMe(); }
+  if (!ATTRACT) readInput();
+  myTick(dt);
+  stepBullets(dt);
+  if (now - me.hurtAt < 30 && !ATTRACT) cam.shake = 8;
+  draw(dt, now);
+  if (now - lastHud > 150) { lastHud = now; hud(now); }
+  requestAnimationFrame(frame);
+}
+
+(async function start() {
+  net = await connect();
+  net.onState((st) => { S = st; });
+  net.on("shot", (msg, from) => {
+    if (!msg || !Array.isArray(msg.b)) return;
+    for (const [x, y, a, ago] of msg.b.slice(0, 20)) addBullet(from, x, y, a, Math.min(2000, msg.s || 600), msg.d || 0, Math.min(30, msg.r || 7), ago || 0);
+  });
+  net.on("shots", (msg) => { if (msg && Array.isArray(msg.list)) for (const [id, x, y, a, s, d, r, ago] of msg.list.slice(0, 40)) addBullet(id, x, y, a, s, d, r, ago); });
+  net.on("down", (msg) => onDown(msg));
+  net.on("xp", (msg) => { if (msg && msg.to === me.id && !me.dead) earn(Math.max(0, Math.min(500, Number(msg.n) || 0)), msg.x, msg.y); });
+  net.onDisconnect(() => { netDown = true; $("net").textContent = "Reconnecting…"; });
+  net.onReconnect(() => { netDown = false; });
+  if (!net.offline && typeof MP !== "undefined") board = MP.auth({ key: MP_CONNECT.key, apiUrl: MP_CONNECT.apiUrl }).leaderboard(CONFIG.board);
+  const taken = new Set([...Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c), ...botColors()]);
+  me.id = net.sessionId; me.color = COLORS.find((c) => !taken.has(c)) || pick(COLORS);
+  net.me.set({ n: myName, c: me.color, hb: Date.now() });
+  startedAt = performance.now(); me.wantSpawn = true;
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
