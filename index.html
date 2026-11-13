@@ -50,6 +50,7 @@
   .card h2 { margin: 0 0 4px; font-size: 25px; }
   .card h3 { margin: 16px 0 4px; font-size: 12px; color: #7a839a; text-transform: uppercase; letter-spacing: .06em; text-align: left; }
   .card ol { text-align: left; margin: 0 0 16px; padding-left: 26px; font-size: 14px; min-height: 40px; }
+  .card li.note { list-style: none; margin-left: -26px; }
   .card li span { float: right; font-variant-numeric: tabular-nums; }
   button.go { width: 100%; min-height: 48px; border: 0; border-radius: 12px; background: #2fb36d; color: #fff; font: 800 17px system-ui, sans-serif; cursor: pointer; box-shadow: 0 4px 0 #23864f; }
   .stick { position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 2px solid #2a314255; background: #2a314214; pointer-events: none; }
@@ -76,7 +77,7 @@
     <h2 id="overTitle">Destroyed</h2>
     <div id="overScore"></div>
     <h3>Top scores, all time</h3>
-    <ol id="board"><li>Loading the leaderboard…</li></ol>
+    <ol id="board"><li class="note">Loading the leaderboard…</li></ol>
     <button class="go" id="again">Play again</button>
   </div>
 </div>
@@ -141,6 +142,7 @@ const CONFIG = {
   botAim: 0.12,         // radians a bot's aim wanders
   botAggr: [0.3, 0.9],  // how keen each bot is to pick a fight instead of farming shapes (0..1)
   botRange: 620,        // px: bots pick fights this close
+  botSpare: 5,          // bots leave tanks more than this many levels below them alone, unless that tank shot them
   board: "top-score",   // leaderboard name
 };
 // Shapes: kind 0..2. xp = score for breaking one.
@@ -171,7 +173,7 @@ const MP_CONNECT = {
   apiUrl: 'https://api.multiplayeragent.com',
 };
 const ATTRACT = new URLSearchParams(location.search).has("attract");
-if (ATTRACT) Object.assign(CONFIG, { map: 1150, seats: 8, shapes: 42, botLevel: [8, 22], respawnMs: 1000, shieldMs: 600, botRange: 700, botAggr: [0.85, 1] });
+if (ATTRACT) Object.assign(CONFIG, { map: 1150, seats: 8, shapes: 42, botLevel: [8, 22], respawnMs: 1000, shieldMs: 600, botRange: 700, botAggr: [0.85, 1], botSpare: 99 });
 
 /** Same shape as the SDK client, kept in this tab: offline play and ?attract. */
 function localRoom() {
@@ -353,7 +355,7 @@ function hitShape(s, b) {
 /** Someone's bullet hit a bot (on the host's screen). */
 function hitBot(b, by, dmg) {
   if (b.dead) return;
-  b.hp -= dmg; b.hurtAt = performance.now();
+  b.hp -= dmg; b.hurtAt = performance.now(); b.hurtBy = by;
   if (b.hp > 0) return;
   Object.assign(b, { hp: 0, dead: 1, respawnAt: Date.now() + CONFIG.respawnMs });
   const msg = { v: b.id, by, xp: Math.round(b.xp * CONFIG.killXp + 20) };
@@ -430,7 +432,11 @@ function stepBot(b, dt, t, tanks, shapes) {
   if (t > b.thinkAt) { // pick something to shoot about twice a second
     b.thinkAt = t + 450;
     let foe = null, fd = CONFIG.botRange;
-    for (const o of tanks) { if (o.id === b.id || t < o.shieldUntil || o.sh) continue; const d = dist(o, b); if (d < fd && (o.lv <= b.lv + 3 || Math.random() < b.aggr * 0.5)) { fd = d; foe = o; } }
+    for (const o of tanks) {
+      if (o.id === b.id || t < o.shieldUntil || o.sh) continue;
+      if (o.lv < b.lv - CONFIG.botSpare && !(b.hurtBy === o.id && performance.now() - b.hurtAt < 5000)) continue; // a big bot doesn't hunt a fresh tank, unless it shot first
+      const d = dist(o, b); if (d < fd && (o.lv <= b.lv + 3 || Math.random() < b.aggr * 0.5)) { fd = d; foe = o; }
+    }
     let prey = null, pv = 0;
     for (const s of shapes) { const v = SHAPES[s.k].xp / (dist(s, b) + 80); if (v > pv) { pv = v; prey = s; } }
     b.flee = b.hp < maxHp(b) * 0.3 && foe;
@@ -443,6 +449,7 @@ function stepBot(b, dt, t, tanks, shapes) {
     const keep = b.target.tank ? (b.cl === "sniper" ? 520 : 340) : 190, side = Math.sin(t / 900 + b.seed) > 0 ? 1 : -1;
     const close = b.flee ? -1.2 : d > keep + 60 ? 1 : d < keep - 60 ? -0.8 : 0;
     mx = Math.cos(ang) * close + Math.cos(ang + Math.PI / 2) * side * (b.target.tank ? 0.8 : 0.3); my = Math.sin(ang) * close + Math.sin(ang + Math.PI / 2) * side * (b.target.tank ? 0.8 : 0.3);
+    if (b.flee) { const e = 160; mx += (b.x < e) - (b.x > M - e); my += (b.y < e) - (b.y > M - e); } // running away: slide off the walls instead of pinning itself in a corner
     const lead = d / bulletSpeedOf(b), aimAt = Math.atan2(tg.y + (tg.vy || 0) * lead - b.y, tg.x + (tg.vx || 0) * lead - b.x) + Math.sin(t / 300 + b.seed) * CONFIG.botAim;
     const diff = Math.atan2(Math.sin(aimAt - b.a), Math.cos(aimAt - b.a));
     b.a += Math.max(-7 * dt, Math.min(7 * dt, diff));
@@ -718,7 +725,7 @@ function drawTank(tk, now) {
 }
 function drawMinimap() {
   if (ATTRACT) return;
-  const size = Math.min(120, W * 0.26), x0 = W - size - 14, y0 = H - size - 20, k = size / M;
+  const size = Math.min(120, W * 0.26), x0 = W - size - 14, y0 = H - size - (W < 700 ? 62 : 20), k = size / M; // narrow screens: above the XP bar
   ctx.fillStyle = "#2a3142cc"; ctx.fillRect(x0, y0, size, size);
   ctx.fillStyle = "#ffffff12"; ctx.fillRect(x0 + size * 0.35, y0 + size * 0.35, size * 0.3, size * 0.3);
   for (const t of allTanks()) if (!t.dead) { ctx.fillStyle = t === me ? "#fff" : t.color; ctx.beginPath(); ctx.arc(x0 + t.x * k, y0 + t.y * k, t === me ? 3.5 : 2.5, 0, Math.PI * 2); ctx.fill(); }
@@ -763,7 +770,9 @@ function hud(now) {
   if (picking && $("pick").hidden) for (const p of pickBtns) drawIcon(p.icon, p.cl);
   $("pick").hidden = !picking;
   const rows = allTanks().filter((t) => !t.dead).map((t) => ({ name: t === me ? "You" : t.name, color: t.color, xp: t.xp, mine: t === me })).sort((a, b) => b.xp - a.xp);
-  $("top").innerHTML = rows.slice(0, 5).map((r) => `<div class="${r.mine ? "me" : ""}"><i style="background:${r.color}"></i><span>${esc(r.name)}</span><b>${r.xp.toLocaleString()}</b></div>`).join("");
+  const shown = rows.slice(0, 5), mine = rows.find((r) => r.mine);
+  if (mine && !shown.includes(mine)) shown[4] = mine; // your own row always shows
+  $("top").innerHTML = shown.map((r) => `<div class="${r.mine ? "me" : ""}"><i style="background:${r.color}"></i><span>${esc(r.name)}</span><b>${r.xp.toLocaleString()}</b></div>`).join("");
   $("feed").innerHTML = feed.filter((f) => now - f.at < 6000).map((f) => `<div style="color:${shade(f.color, 0.8)}">${esc(f.text)}</div>`).join("");
   if (now > toastUntil) $("toast").style.opacity = 0;
   $("hint").style.opacity = now - startedAt < 10000 && !me.dead ? 1 : 0;
@@ -787,11 +796,11 @@ function showOver() {
   $("overScore").textContent = `Score ${me.best.toLocaleString()} · level ${me.lv} ${CLASSES[me.cl].name}${me.kills ? ` · ${me.kills} destroyed` : ""}`;
   $("over").hidden = false;
   const list = $("board");
-  if (!board) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
-  list.innerHTML = "<li>Loading the leaderboard…</li>";
+  if (!board) { list.innerHTML = '<li class="note">Leaderboards need a connection.</li>'; return; }
+  list.innerHTML = '<li class="note">Loading the leaderboard…</li>';
   board.submit(me.best).catch(() => null).then(() => board.top(10)).then(({ entries }) => {
-    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${Number(e.score).toLocaleString()}</span></li>`).join("") : "<li>No scores yet. You're first.</li>";
-  }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${Number(e.score).toLocaleString()}</span></li>`).join("") : `<li class="note">No scores yet. You're first.</li>`;
+  }).catch(() => { list.innerHTML = `<li class="note">Couldn't load the leaderboard.</li>`; });
 }
 $("again").onclick = () => spawnMe();
 
@@ -812,7 +821,7 @@ document.body.classList.toggle("touch", touchUI);
 const keys = new Set(), mouse = { x: 0, y: 0, seen: false, down: false };
 const MOVE = { w: [0, -1], arrowup: [0, -1], s: [0, 1], arrowdown: [0, 1], a: [-1, 0], arrowleft: [-1, 0], d: [1, 0], arrowright: [1, 0] };
 addEventListener("keydown", (e) => {
-  const k = e.key.toLowerCase();
+  const k = /^(Digit|Numpad)\d$/.test(e.code) ? e.code.slice(-1) : e.key.toLowerCase(); // digits by key position: Shift+1 still upgrades
   try { audio ||= new AudioContext(); } catch {}
   if (MOVE[k] || k === " ") e.preventDefault();
   if (!e.repeat) {
@@ -848,6 +857,7 @@ for (const ev of ["pointerup", "pointercancel"]) addEventListener(ev, (e) => {
   for (const side of ["move", "aim"]) if (sticks[side] && sticks[side].id === e.pointerId) { sticks[side].el.hidden = true; sticks[side] = null; }
 });
 document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+cv.addEventListener("contextmenu", (e) => e.preventDefault()); // right-click doesn't open the browser menu mid-fight
 /** Turn keys, mouse and sticks into this frame's move, aim and trigger. Aim goes through the camera that drew the frame. */
 function readInput() {
   input.mx = input.my = 0;
