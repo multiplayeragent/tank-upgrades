@@ -55,6 +55,7 @@
   button.go { width: 100%; min-height: 48px; border: 0; border-radius: 12px; background: #2fb36d; color: #fff; font: 800 17px system-ui, sans-serif; cursor: pointer; box-shadow: 0 4px 0 #23864f; }
   .stick { position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 2px solid #2a314255; background: #2a314214; pointer-events: none; }
   .stick i { position: absolute; left: 34px; top: 34px; width: 52px; height: 52px; border-radius: 50%; background: #2a314266; }
+  @media (max-width: 699px) { #hint { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 178px); } } /* narrow screens: above the minimap */
   @media (max-width: 640px) { #top { width: 128px; font-size: 12px; } #score { font-size: 22px; } #pick button { width: 80px; min-height: 84px; } }
 </style>
 <script src="https://cdn.multiplayeragent.com/sdk/mp.global.js"></script>
@@ -107,7 +108,9 @@
  *     batched 10 times a second. Every screen flies every bullet the same way.
  *   - A HIT ON A TANK IS THE VICTIM'S OWN FACT: only you check bullets against yourself, take
  *     the damage, and at 0 hp you send "down" {v: you, by: shooter, xp}. The shooter adds xp.
- *     (The host does this for bots.) Elsewhere a bullet just stops with a spark.
+ *     (The host does this for bots.) Elsewhere a bullet just stops with a spark. Every screen
+ *     checks what arrives: a "down" only from the victim (or the host for a bot), "xp"/"shots" only
+ *     from the host, and a "shot" capped to what that tank can fire, from where it is.
  *   - The HOST is the lowest sessionId among live players (heartbeat seen in the last 3s),
  *     worked out every frame. Only the host writes the shared fields `shapes` (every shape:
  *     [id, kind, x, y, hp]) and `bots`. The host decides which bullets break shapes and sends
@@ -514,7 +517,7 @@ function onDown(msg) {
   if (v) explode(v.x, v.y, v.color);
   feed.unshift({ text: `${nameOf(msg.by)} destroyed ${nameOf(msg.v)}`, color: k ? k.color : "#2a3142", at: performance.now() });
   feed.length = Math.min(feed.length, 4);
-  const xp = Math.max(0, Math.min(50000, Number(msg.xp) || 0));
+  const xp = Math.max(0, Math.min(v ? Math.round(v.xp * CONFIG.killXp + 20) : 20, Number(msg.xp) || 0)); // never more than half the score this screen saw the victim hold
   if (msg.by === me.id && msg.v !== me.id && !me.dead) { me.kills++; earn(xp, v ? v.x : me.x, v ? v.y : me.y); toast(`You destroyed ${nameOf(msg.v)}!`); sfx("kill"); }
   if (world.acting) { const b = world.bots.get(msg.by); if (b) gainXp(b, xp); }
 }
@@ -894,13 +897,18 @@ function frame(now) {
 (async function start() {
   net = await connect();
   net.onState((st) => { S = st; });
-  net.on("shot", (msg, from) => {
+  net.on("shot", (msg, from) => { // a player's shots: no more bullets, damage, speed or size than its tank can have, fired from where it is
     if (!msg || !Array.isArray(msg.b)) return;
-    for (const [x, y, a, ago] of msg.b.slice(0, 20)) addBullet(from, x, y, a, Math.min(2000, msg.s || 600), msg.d || 0, Math.min(30, msg.r || 7), ago || 0);
+    const v = views.get(from), maxDmg = (CONFIG.damage + CONFIG.maxStat * CONFIG.damagePerPoint) * (CLASSES[v && v.cl] || CLASSES.sniper).damage;
+    for (const [x, y, a, ago] of msg.b.slice(0, 8)) {
+      if (v && !(Math.hypot(x - v.x, y - v.y) < 300)) continue;
+      addBullet(from, x, y, a, Math.min(1200, msg.s || 600), Math.min(maxDmg, Math.max(0, Number(msg.d) || 0)), Math.min(16, msg.r || 7), ago || 0);
+    }
   });
-  net.on("shots", (msg) => { if (msg && Array.isArray(msg.list)) for (const [id, x, y, a, s, d, r, ago] of msg.list.slice(0, 40)) addBullet(id, x, y, a, s, d, r, ago); });
-  net.on("down", (msg) => onDown(msg));
-  net.on("xp", (msg) => { if (msg && msg.to === me.id && !me.dead) earn(Math.max(0, Math.min(500, Number(msg.n) || 0)), msg.x, msg.y); });
+  const fromHost = (from) => from === livePlayers()[0]; // bot shots, bot kills and shape xp only come from the host
+  net.on("shots", (msg, from) => { if (msg && Array.isArray(msg.list) && fromHost(from)) for (const [id, x, y, a, s, d, r, ago] of msg.list.slice(0, 40)) addBullet(id, x, y, a, s, d, r, ago); });
+  net.on("down", (msg, from) => { const v = msg && tankById(msg.v); if (msg && (msg.v === from || (fromHost(from) && v && v.bot))) onDown(msg); }); // you can only report your own end (the host reports its bots')
+  net.on("xp", (msg, from) => { if (msg && msg.to === me.id && !me.dead && fromHost(from)) earn(Math.max(0, Math.min(500, Number(msg.n) || 0)), msg.x, msg.y); });
   net.onDisconnect(() => { netDown = true; $("net").textContent = "Reconnecting…"; });
   net.onReconnect(() => { netDown = false; });
   if (!net.offline && typeof MP !== "undefined") board = MP.auth({ key: MP_CONNECT.key, apiUrl: MP_CONNECT.apiUrl }).leaderboard(CONFIG.board);
